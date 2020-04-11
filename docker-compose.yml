@@ -81,7 +81,7 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:12181,zookeeper-2:12181,zookeeper-3:12181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:39092
 
-  flume:
+  cloudera:
     image: cloudera/quickstart
     depends_on:
       - kafka-1
