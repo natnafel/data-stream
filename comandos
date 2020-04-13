@@ -1,19 +1,5 @@
-#Update git
-sudo yum install http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm
-sudo yum install git
-sudo yum update -y nss curl libcurl
+#we will use the hbase library for some imports to connect it with SparkSQL
+spark-shell --driver-class-path /usr/lib/hbase --master local[3] -i '/home/cloudera/workspace/Final Project/file.scala' 
 
-#install HSpark to connect Hbase and Spark
-git clone https://github.com/bomeng/Heracles.git
-export HSPARK_HOME=$HOME/Heracles
-cd $HSPARK_HOME
-mvn -DskipTests clean install
-export HBASE_CLASSPATH=$HSPARK_HOME/target/hspark-2.2.0.jar
-
-#install scala
-wget http://downloads.lightbend.com/scala/2.11.8/scala-2.11.8.rpm
-sudo yum install scala-2.11.8.rpm
-
-spark-shell --driver-class-path /usr/lib/hbase --master local[3]
 
 
