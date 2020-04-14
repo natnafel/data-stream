@@ -1,0 +1,5 @@
+#we will use the hbase library for some imports to connect it with SparkSQL
+spark-shell --driver-class-path /usr/lib/hbase --master local[3] -i '/home/cloudera/workspace/Final Project/file.scala' 
+
+
+
