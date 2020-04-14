@@ -1,2 +1,7 @@
-#IDE specific files
+# IDE specific files
 .idea
+*.iml
+
+# generated files
+out/
+spark-streaming/target
