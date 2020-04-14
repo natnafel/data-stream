@@ -17,6 +17,8 @@ case class Tweet(rowkey: String, text: String, numLikes: Long, dateCreated: Stri
 
 //set hbase admin configuration
 val conf = HBaseConfiguration.create()
+conf.set("es.index.auto.create", "true");
+
 val tablename = "tweet"
 conf.set(TableInputFormat.INPUT_TABLE,tablename)
 val admin = new HBaseAdmin(conf)
