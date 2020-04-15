@@ -176,7 +176,7 @@ public class TopicConsumer {
 
                             table.put(toPut(ms));
 
-                            writeToElasticSearch(machineStatJavaRDD, sc);
+                            writeToElasticSearch(ms, sc);
                         }
 
                     });
@@ -247,9 +247,7 @@ public class TopicConsumer {
                 Integer.parseInt(col[14]),Integer.parseInt(col[15]),Integer.parseInt(col[16]),dateFormat.parse(col[17]+" "+col[18]));
     }
 
-    private static void writeToElasticSearch(JavaRDD<MachineStat> machineStatRDD, JavaSparkContext sc) {
-        MachineStat ms = machineStatRDD.first();
-
+    private static void writeToElasticSearch(MachineStat ms, JavaSparkContext sc) {
         Gson gson = new Gson();
         String json = gson.toJson(ms);
         JavaEsSpark.saveJsonToEs(sc.parallelize(ImmutableList.of(json)), "spark/docs");

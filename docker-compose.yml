@@ -124,7 +124,7 @@ services:
   hbase:
     image: dajobe/hbase
 
-  cloudera:
+  flume:
     image: cloudera/quickstart
     depends_on:
       - kafka-1
