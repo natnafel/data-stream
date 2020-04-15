@@ -5,3 +5,4 @@
 # generated files
 out/
 spark-streaming/target
+*.swp

@@ -1,5 +1,7 @@
 package sparkstreaming;
 
+import com.google.common.collect.ImmutableList;
+import com.google.gson.Gson;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -11,6 +13,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaInputDStream;
@@ -18,6 +21,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka010.ConsumerStrategies;
 import org.apache.spark.streaming.kafka010.KafkaUtils;
 import org.apache.spark.streaming.kafka010.LocationStrategies;
+import org.elasticsearch.spark.rdd.api.java.JavaEsSpark;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -29,7 +33,7 @@ import java.util.*;
  */
 public class TopicConsumer {
 
-    //https://access.redhat.com/solutions/1160343
+    // https://access.redhat.com/solutions/1160343
     static class MachineStat implements Serializable{
         int processesWaitingForRunTime;
         int processesInUninterruptibleSleep;
@@ -80,6 +84,7 @@ public class TopicConsumer {
             this.timestamp = timestamp;
         }
     }
+
     private static final String TABLE_NAME = "machineStat";
     private static final String GENERAL_COLUMN_NAME = "gnl";
     private static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-M-dd HH:mm:ss");
@@ -121,7 +126,12 @@ public class TopicConsumer {
 
         Collection<String> topics = Collections.singletonList("tweets");
 
-        JavaSparkContext sc = new JavaSparkContext(new SparkConf().setAppName("Spark-Kafka-Consumer").setMaster("local"));
+        JavaSparkContext sc = new JavaSparkContext(new SparkConf()
+                .setAppName("Spark-Kafka-Consumer")
+                .setMaster("local[1]")
+                .set("es.index.auto.create", "true")
+                .set("es.nodes", "elasticsearch")
+        );
         JavaStreamingContext streamingContext = new JavaStreamingContext(sc, new Duration(2000));
 
         JavaInputDStream<ConsumerRecord<String, String>> stream =
@@ -164,44 +174,9 @@ public class TopicConsumer {
 
                             MachineStat ms = machineStatJavaRDD.first();
 
-                            Put put = new Put(Bytes.toBytes(dateFormat.format(ms.timestamp)));
+                            table.put(toPut(ms));
 
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_PROCESSES_WAITING_FOR_RUNTIME),
-                                    Bytes.toBytes(ms.processesWaitingForRunTime));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_PROCESSES_IN_UNINTERRUPTIBLE_SLEEP),
-                                    Bytes.toBytes(ms.processesInUninterruptibleSleep));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_VIRTUAL_MEMORY_USED),
-                                    Bytes.toBytes(ms.virtualMemoryUsed));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_FREE_MEMORY),
-                                    Bytes.toBytes(ms.freeMemory));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BUFFER_MEMORY_USED),
-                                    Bytes.toBytes(ms.bufferMemoryUsed));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_CACHE_MEMORY_USED),
-                                    Bytes.toBytes(ms.cacheMemoryUsed));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_MEMORY_SWAPPED_IN_FROM_DISK),
-                                    Bytes.toBytes(ms.memorySwappedInFromDisk));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_MEMORY_SWAPPED_TO_DISK),
-                                    Bytes.toBytes(ms.memorySwappedToDisk));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BLOCK_RECEIVED_FROM_BLOCK_DEVICE),
-                                    Bytes.toBytes(ms.blockReceivedFromBlockDevice));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BLOCK_SENT_TO_BLOCK_DEVICE),
-                                    Bytes.toBytes(ms.blockSentToBlockDevice));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_INTERRUPTS_PER_SECOND),
-                                    Bytes.toBytes(ms.interruptsPerSecond));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_CONTEXT_SWITCH_PER_SECOND),
-                                    Bytes.toBytes(ms.contextSwitchPerSecond));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_RUNNING_NON_KERNEL_CODE),
-                                    Bytes.toBytes(ms.timeRunningNonKernelCode));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_RUNNING_KERNEL_CODE),
-                                    Bytes.toBytes(ms.timeRunningKernelCode));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_IDLE),
-                                    Bytes.toBytes(ms.timeIdle));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_WAITING_FOR_IO),
-                                    Bytes.toBytes(ms.timeWaitingForIo));
-                            put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_STOLEN_FROM_VM),
-                                    Bytes.toBytes(ms.timeStolenFromVM));
-
-                            table.put(put);
+                            writeToElasticSearch(machineStatJavaRDD, sc);
                         }
 
                     });
@@ -221,6 +196,48 @@ public class TopicConsumer {
 
     }
 
+
+    private static Put toPut(MachineStat ms){
+        Put put = new Put(Bytes.toBytes(dateFormat.format(ms.timestamp)));
+
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_PROCESSES_WAITING_FOR_RUNTIME),
+                Bytes.toBytes(ms.processesWaitingForRunTime));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_PROCESSES_IN_UNINTERRUPTIBLE_SLEEP),
+                Bytes.toBytes(ms.processesInUninterruptibleSleep));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_VIRTUAL_MEMORY_USED),
+                Bytes.toBytes(ms.virtualMemoryUsed));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_FREE_MEMORY),
+                Bytes.toBytes(ms.freeMemory));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BUFFER_MEMORY_USED),
+                Bytes.toBytes(ms.bufferMemoryUsed));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_CACHE_MEMORY_USED),
+                Bytes.toBytes(ms.cacheMemoryUsed));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_MEMORY_SWAPPED_IN_FROM_DISK),
+                Bytes.toBytes(ms.memorySwappedInFromDisk));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_MEMORY_SWAPPED_TO_DISK),
+                Bytes.toBytes(ms.memorySwappedToDisk));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BLOCK_RECEIVED_FROM_BLOCK_DEVICE),
+                Bytes.toBytes(ms.blockReceivedFromBlockDevice));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_BLOCK_SENT_TO_BLOCK_DEVICE),
+                Bytes.toBytes(ms.blockSentToBlockDevice));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_INTERRUPTS_PER_SECOND),
+                Bytes.toBytes(ms.interruptsPerSecond));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_CONTEXT_SWITCH_PER_SECOND),
+                Bytes.toBytes(ms.contextSwitchPerSecond));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_RUNNING_NON_KERNEL_CODE),
+                Bytes.toBytes(ms.timeRunningNonKernelCode));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_RUNNING_KERNEL_CODE),
+                Bytes.toBytes(ms.timeRunningKernelCode));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_IDLE),
+                Bytes.toBytes(ms.timeIdle));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_WAITING_FOR_IO),
+                Bytes.toBytes(ms.timeWaitingForIo));
+        put.addColumn(Bytes.toBytes(GENERAL_COLUMN_NAME), Bytes.toBytes(COLUMN_NAME_TIME_STOLEN_FROM_VM),
+                Bytes.toBytes(ms.timeStolenFromVM));
+
+        return put;
+    }
+
     private static MachineStat toMachineStat(String line) throws ParseException {
         String[] col =  line.trim().split("\\s+");
         return new MachineStat(Integer.parseInt(col[0]), Integer.parseInt(col[1]),Integer.parseInt(col[2]),
@@ -228,6 +245,14 @@ public class TopicConsumer {
                 Integer.parseInt(col[6]),Integer.parseInt(col[7]),Integer.parseInt(col[8]),Integer.parseInt(col[9]),
                 Integer.parseInt(col[10]),Integer.parseInt(col[11]),Integer.parseInt(col[12]),Integer.parseInt(col[13]),
                 Integer.parseInt(col[14]),Integer.parseInt(col[15]),Integer.parseInt(col[16]),dateFormat.parse(col[17]+" "+col[18]));
+    }
+
+    private static void writeToElasticSearch(JavaRDD<MachineStat> machineStatRDD, JavaSparkContext sc) {
+        MachineStat ms = machineStatRDD.first();
+
+        Gson gson = new Gson();
+        String json = gson.toJson(ms);
+        JavaEsSpark.saveJsonToEs(sc.parallelize(ImmutableList.of(json)), "spark/docs");
     }
 
 }
