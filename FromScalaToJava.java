@@ -16,7 +16,7 @@ Configuration config = HBaseConfiguration.create();
 		try(Connection connection = ConnectionFactory.createConnection(config);
              Admin admin = connection.getAdmin()){
 		 Table table = connection.getTable(TableName.valueOf(TABLE_NAME));
-		 RDD<Tuple2<Element, NullWritable>> pairRDD = sparkContext.newAPIHadoopRDD(config,
+		 RDD<Tuple2<ImmutableBytesWritable, Result>> hbaseRDD = sparkContext.newAPIHadoopRDD(config,
             TableInputFormat.class,
             ImmutableBytesWritable.class,
             Result.class);
