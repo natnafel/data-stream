@@ -118,13 +118,13 @@ public class TopicConsumer {
         kafkaParams.put("bootstrap.servers", "kafka-1:19092,kafka-2:29092,kafka-3:39090");//coma separated domain:port
         kafkaParams.put("key.deserializer", StringDeserializer.class);
         kafkaParams.put("value.deserializer", StringDeserializer.class);
-        kafkaParams.put("group.id", "kafka-tweets-stream");
+        kafkaParams.put("group.id", "kafka-vmstat-stream");
         kafkaParams.put("auto.offset.reset", "latest");
         kafkaParams.put("enable.auto.commit", false);
 
         System.out.println(TopicConsumer.class.getCanonicalName());
 
-        Collection<String> topics = Collections.singletonList("tweets");
+        Collection<String> topics = Collections.singletonList("vmstat");
 
         JavaSparkContext sc = new JavaSparkContext(new SparkConf()
                 .setAppName("Spark-Kafka-Consumer")

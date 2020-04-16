@@ -132,4 +132,4 @@ services:
       - kafka-3
     volumes:
       - ./flume-config/streaming-data-ingestion.conf:/home/cloudera/flume.conf
-    entrypoint: ["flume-ng", "agent", "-n", "twitter-agent", "/home/cloudera", "-f", "/home/cloudera/flume.conf"]
+    entrypoint: ["flume-ng", "agent", "-n", "stat-agent", "/home/cloudera", "-f", "/home/cloudera/flume.conf"]
